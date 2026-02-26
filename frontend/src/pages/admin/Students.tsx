@@ -1,15 +1,38 @@
-import { useTeachers } from '../../TeacherContext';
+// src/pages/admin/Students.tsx
+import { getStudents, deleteStudent } from '../../api/api';
 import { Search, Plus, MoreVertical, Phone, ExternalLink, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Link } from 'react-router-dom';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { exportToExcel } from '../../lib/excel';
 
+interface Student {
+  id: number;
+  customId: string;
+  name: string;
+  course: string;
+  phone: string;
+  status: 'active' | 'graduated' | 'left';
+  address: string;
+  school: string;
+  grade: string;
+  joinedDate: string;
+}
+
 export const Students = () => {
-  const { students } = useTeachers();
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(1);
   const rowsPerPage = 100;
+
+  // ─── Backenddan studentlarni olish ───
+  useEffect(() => {
+    getStudents()
+      .then(setStudents)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleExport = () => {
     const data = students.map(s => ({
@@ -21,19 +44,28 @@ export const Students = () => {
       'Manzil': s.address,
       'Maktab': s.school,
       'Sinf': s.grade,
-      'Qo\'shilgan sana': s.joinedDate
+      "Qo'shilgan sana": s.joinedDate
     }));
-    exportToExcel(data, 'O\'quvchilar');
+    exportToExcel(data, "O'quvchilar");
   };
 
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  // ─── Student o'chirish ───
+  const handleDelete = async (id: number) => {
+    if (!confirm("O'chirishni tasdiqlaysizmi?")) return;
+    await deleteStudent(id).catch(console.error);
+    setStudents(prev => prev.filter(s => s.id !== id));
+  };
+
+  const filteredStudents = students.filter(s =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.phone.includes(searchTerm) ||
     s.customId.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const totalPages = Math.ceil(filteredStudents.length / rowsPerPage);
   const currentStudents = filteredStudents.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  if (loading) return <p className="p-8 text-slate-500">Yuklanmoqda...</p>;
 
   return (
     <div className="space-y-8">
@@ -43,15 +75,18 @@ export const Students = () => {
           <p className="text-slate-500">Barcha o'quvchilar ro'yxati va holati</p>
         </div>
         <div className="flex gap-3">
-          <button 
+          <button
             onClick={handleExport}
             className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-semibold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
           >
             <FileSpreadsheet className="w-5 h-5" /> Excel
           </button>
-          <button className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold flex items-center gap-2 hover:bg-indigo-700 transition-all">
+          <Link
+            to="/admin/students/new"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold flex items-center gap-2 hover:bg-indigo-700 transition-all"
+          >
             <Plus className="w-5 h-5" /> Yangi o'quvchi
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -59,8 +94,8 @@ export const Students = () => {
         <div className="p-4 border-b border-slate-50 flex items-center gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Ism yoki telefon bo'yicha qidirish..."
               value={searchTerm}
               onChange={(e) => {
@@ -88,7 +123,7 @@ export const Students = () => {
               {currentStudents.map((student) => (
                 <tr key={student.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="px-6 py-4">
-                    <Link 
+                    <Link
                       to={`/admin/students/${student.id}`}
                       className="group-hover:text-indigo-600 transition-colors"
                     >
@@ -112,13 +147,16 @@ export const Students = () => {
                       student.status === 'graduated' ? "bg-blue-50 text-blue-600" :
                       "bg-red-50 text-red-600"
                     )}>
-                      {student.status === 'active' ? 'Faol' : 
+                      {student.status === 'active' ? 'Faol' :
                        student.status === 'graduated' ? 'Bitirgan' : 'Tark etgan'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-500">{student.joinedDate}</td>
                   <td className="px-6 py-4 text-right">
-                    <button className="p-1 hover:bg-slate-200 rounded-lg transition-colors">
+                    <button
+                      onClick={() => handleDelete(student.id)}
+                      className="p-1 hover:bg-red-100 rounded-lg transition-colors"
+                    >
                       <MoreVertical className="w-5 h-5 text-slate-400" />
                     </button>
                   </td>
@@ -141,14 +179,14 @@ export const Students = () => {
               Jami {filteredStudents.length} tadan {(currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, filteredStudents.length)} ko'rsatilmoqda
             </div>
             <div className="flex gap-2">
-              <button 
+              <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm"
               >
                 <ChevronLeft className="w-4 h-4" /> Oldingi
               </button>
-              <button 
+              <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm"

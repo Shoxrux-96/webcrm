@@ -1,16 +1,53 @@
-import { useTeachers } from '../../TeacherContext';
+// src/pages/admin/Applications.tsx
+import { getEnrollments, createEnrollment } from '../../api/api';
 import { FileText, Eye, CheckCircle, Download, X, Calendar, Phone, MapPin, GraduationCap, FileSpreadsheet, Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Application } from '../../types';
 import { exportToExcel } from '../../lib/excel';
 
+interface Application {
+  id: number;
+  fullName: string;
+  phone: string;
+  courseName: string;
+  date: string;
+  status: 'confirmed' | 'pending';
+  address: string;
+  school: string;
+  grade: string;
+  comment?: string;
+}
+
 export const Applications = () => {
-  const { applications, confirmApplication } = useTeachers();
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = React.useState<Application | null>(null);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState(1);
   const rowsPerPage = 100;
+
+  // ─── Backenddan arizalarni olish ───
+  useEffect(() => {
+    getEnrollments()
+      .then(setApplications)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // ─── Arizani tasdiqlash ───
+  const confirmApplication = async (id: number) => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/enrollments/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'confirmed' }),
+      });
+      const updated = await res.json();
+      setApplications(prev => prev.map(a => a.id === id ? { ...a, status: 'confirmed' } : a));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleExport = () => {
     const data = applications.map(app => ({
@@ -26,13 +63,15 @@ export const Applications = () => {
     exportToExcel(data, 'Arizalar');
   };
 
-  const filteredApps = applications.filter(app => 
+  const filteredApps = applications.filter(app =>
     app.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     app.phone.includes(searchTerm)
   );
 
   const totalPages = Math.ceil(filteredApps.length / rowsPerPage);
   const currentApps = filteredApps.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  if (loading) return <p className="p-8 text-slate-500">Yuklanmoqda...</p>;
 
   return (
     <div className="space-y-8">
@@ -41,7 +80,7 @@ export const Applications = () => {
           <h1 className="text-2xl font-bold text-slate-900">Arizalar</h1>
           <p className="text-slate-500">Kelib tushgan barcha arizalar ro'yxati</p>
         </div>
-        <button 
+        <button
           onClick={handleExport}
           className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-semibold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
         >
@@ -53,14 +92,11 @@ export const Applications = () => {
         <div className="p-4 border-b border-slate-50 flex items-center gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Ism yoki telefon bo'yicha qidirish..."
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-sm"
             />
           </div>
@@ -95,8 +131,8 @@ export const Applications = () => {
                   <td className="px-6 py-4 text-sm text-slate-500">{app.date}</td>
                   <td className="px-6 py-4">
                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      app.status === 'confirmed' 
-                        ? 'bg-emerald-50 text-emerald-600' 
+                      app.status === 'confirmed'
+                        ? 'bg-emerald-50 text-emerald-600'
                         : 'bg-amber-50 text-amber-600'
                     }`}>
                       {app.status === 'confirmed' ? 'Tasdiqlangan' : 'Kutilmoqda'}
@@ -104,10 +140,7 @@ export const Applications = () => {
                   </td>
                   <td className="px-6 py-4">
                     {app.status === 'confirmed' ? (
-                      <a 
-                        href="#" 
-                        className="flex items-center gap-1 text-indigo-600 hover:underline text-sm font-bold"
-                      >
+                      <a href="#" className="flex items-center gap-1 text-indigo-600 hover:underline text-sm font-bold">
                         <Download className="w-4 h-4" /> PDF
                       </a>
                     ) : (
@@ -116,14 +149,14 @@ export const Applications = () => {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex gap-2 justify-end">
-                      <button 
+                      <button
                         onClick={() => setSelectedApp(app)}
                         className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                       >
                         <Eye className="w-5 h-5" />
                       </button>
                       {app.status === 'pending' && (
-                        <button 
+                        <button
                           onClick={() => confirmApplication(app.id)}
                           className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
                         >
@@ -136,9 +169,7 @@ export const Applications = () => {
               ))}
               {currentApps.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                    Arizalar topilmadi
-                  </td>
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">Arizalar topilmadi</td>
                 </tr>
               )}
             </tbody>
@@ -151,18 +182,10 @@ export const Applications = () => {
               Jami {filteredApps.length} tadan {(currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, filteredApps.length)} ko'rsatilmoqda
             </div>
             <div className="flex gap-2">
-              <button 
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm"
-              >
+              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm">
                 <ChevronLeft className="w-4 h-4" /> Oldingi
               </button>
-              <button 
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm"
-              >
+              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm">
                 Keyingi <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -174,7 +197,7 @@ export const Applications = () => {
       <AnimatePresence>
         {selectedApp && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -182,14 +205,11 @@ export const Applications = () => {
             >
               <div className="p-4 md:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <h2 className="text-xl font-bold text-slate-900">Ariza tafsilotlari</h2>
-                <button 
-                  onClick={() => setSelectedApp(null)}
-                  className="p-2 hover:bg-white rounded-xl transition-all text-slate-400 hover:text-slate-600"
-                >
+                <button onClick={() => setSelectedApp(null)} className="p-2 hover:bg-white rounded-xl transition-all text-slate-400 hover:text-slate-600">
                   <X className="w-6 h-6" />
                 </button>
               </div>
-              
+
               <div className="p-4 md:p-8 space-y-8 overflow-y-auto">
                 <div className="grid md:grid-cols-2 gap-8">
                   <div className="space-y-6">
@@ -221,7 +241,6 @@ export const Applications = () => {
                       </div>
                     </div>
                   </div>
-
                   <div className="space-y-6">
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
@@ -262,20 +281,14 @@ export const Applications = () => {
 
                 <div className="flex gap-4 pt-4">
                   {selectedApp.status === 'pending' && (
-                    <button 
-                      onClick={() => {
-                        confirmApplication(selectedApp.id);
-                        setSelectedApp(null);
-                      }}
+                    <button
+                      onClick={() => { confirmApplication(selectedApp.id); setSelectedApp(null); }}
                       className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
                     >
                       Arizani tasdiqlash
                     </button>
                   )}
-                  <button 
-                    onClick={() => setSelectedApp(null)}
-                    className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all"
-                  >
+                  <button onClick={() => setSelectedApp(null)} className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all">
                     Yopish
                   </button>
                 </div>

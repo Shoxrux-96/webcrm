@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 
 from app.routes import (
     courses,
@@ -11,18 +12,22 @@ from app.routes import (
     blogs
 )
 
-app = FastAPI()
 
 # =====================================
 # CORS
 # =====================================
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # productionda aniq domen yozasan
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    middleware=[
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    ]
 )
+
 
 # =====================================
 # Routes

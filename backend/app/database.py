@@ -1,38 +1,51 @@
+import os
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base
+from dotenv import load_dotenv
 
 # =====================================
-# PostgreSQL URL
+# Load environment variables
 # =====================================
-DATABASE_URL = "postgresql://postgres:1234@localhost:5432/webcrm"
+load_dotenv()
 
 # =====================================
-# Engine
+# Database URL (.env dan olinadi)
+# =====================================
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:1234@localhost:5432/webcrm"
+)
+
+# =====================================
+# Engine Configuration
 # =====================================
 engine = create_engine(
     DATABASE_URL,
-    pool_size=20,
-    max_overflow=0
+    pool_size=20,          # bir vaqtning o'zida 20 ta connection
+    max_overflow=10,       # qo'shimcha 10 ta temporary connection
+    pool_pre_ping=True,    # o‘lik connection ni tekshiradi
+    echo=os.getenv("DEBUG", "False") == "True",
+    future=True            # SQLAlchemy 2.0 style
 )
 
 # =====================================
-# Session
+# Session Configuration
 # =====================================
 SessionLocal = sessionmaker(
-    autocommit=False,
+    bind=engine,
     autoflush=False,
-    bind=engine
+    autocommit=False,
+    future=True
 )
 
 # =====================================
-# Base
+# Base Model
 # =====================================
 Base = declarative_base()
 
 
 # =====================================
-# DB Dependency (FastAPI)
+# FastAPI Dependency
 # =====================================
 def get_db():
     db = SessionLocal()
