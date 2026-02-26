@@ -1,13 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional
 from datetime import datetime
-
-
-# ================================
-# Base Config
-# ================================
-class BaseConfig:
-    orm_mode = True
 
 
 # ================================
@@ -38,8 +31,7 @@ class CourseResponse(CourseBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config(BaseConfig):
-        pass
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================
@@ -72,8 +64,7 @@ class StudentResponse(StudentBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config(BaseConfig):
-        pass
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================
@@ -108,8 +99,7 @@ class TeacherResponse(TeacherBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config(BaseConfig):
-        pass
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================
@@ -126,8 +116,7 @@ class GroupResponse(GroupCreate):
     created_at: datetime
     updated_at: datetime
 
-    class Config(BaseConfig):
-        pass
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================
@@ -144,8 +133,7 @@ class EnrollmentResponse(EnrollmentCreate):
     created_at: datetime
     updated_at: datetime
 
-    class Config(BaseConfig):
-        pass
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================
@@ -163,8 +151,7 @@ class UserResponse(BaseModel):
     role: str
     created_at: datetime
 
-    class Config(BaseConfig):
-        pass
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================
@@ -185,8 +172,7 @@ class VacancyResponse(VacancyCreate):
     created_at: datetime
     updated_at: datetime
 
-    class Config(BaseConfig):
-        pass
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================
@@ -206,5 +192,4 @@ class BlogResponse(BlogCreate):
     created_at: datetime
     updated_at: datetime
 
-    class Config(BaseConfig):
-        pass
+    model_config = ConfigDict(from_attributes=True)
