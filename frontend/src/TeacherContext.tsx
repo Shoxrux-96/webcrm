@@ -49,9 +49,9 @@ export const TeacherProvider = ({ children }: { children: ReactNode }) => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
   const [settings, setSettings] = useState({
-    telegramLink: 'https://t.me/futurelab_uz',
-    youtubeLink: 'https://youtube.com/@futurelab',
-    instagramLink: 'https://instagram.com/futurelab_uz'
+    telegramLink: 'https://t.me/shoxruxxudoynazarov',
+    youtubeLink: 'https://www.youtube.com/@webtexno',
+    instagramLink: 'https://www.instagram.com/_shoxrux__uzb/'
   });
 
   const addTeacher = (teacher: Teacher) => {
