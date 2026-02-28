@@ -8,7 +8,8 @@ import {
   LogOut,
   GraduationCap,
   Briefcase,
-  X
+  X,
+  MailOpen // Yangi icon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -21,6 +22,7 @@ const sidebarItems = [
   { name: 'O\'qituvchilar', path: '/admin/teachers', icon: UserSquare2 },
   { name: 'Yangiliklar', path: '/admin/blog', icon: FileText },
   { name: 'Vakansiyalar', path: '/admin/vacancies', icon: Briefcase },
+  { name: 'Vakansiya Arizalari', path: '/admin/vacancy-applications', icon: MailOpen }, // YANGI
 ];
 
 interface SidebarProps {

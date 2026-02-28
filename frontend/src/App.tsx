@@ -21,6 +21,7 @@ import { Teachers } from "./pages/admin/Teachers";
 import { BlogManagement } from "./pages/admin/BlogManagement";
 import { VacanciesManagement } from "./pages/admin/VacanciesManagement";
 import { Applications } from "./pages/admin/Applications";
+import { VacancyApplications } from "./pages/admin/VacancyApplications";
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="blog" element={<BlogManagement />} />
             <Route path="vacancies" element={<VacanciesManagement />} />
             <Route path="applications" element={<Applications />} />
+            <Route path="/admin/vacancy-applications" element={<VacancyApplications />} />
           </Route>
 
           {/* Fallback */}

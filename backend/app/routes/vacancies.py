@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -12,17 +13,27 @@ router = APIRouter(
 )
 
 
+# ─── Helper: DB object → dict (requirements: str → list) ───
+def _serialize(v: models.Vacancy) -> dict:
+    data = {c.name: getattr(v, c.name) for c in v.__table__.columns}
+    try:
+        data["requirements"] = json.loads(data["requirements"] or "[]")
+    except Exception:
+        data["requirements"] = []
+    return data
+
+
 # =====================================
-# Get all vacancies (pagination)
+# Get all vacancies
 # =====================================
 @router.get("/", response_model=List[schemas.VacancyResponse])
 def get_vacancies(
     skip: int = 0,
-    limit: int = 10,
+    limit: int = 100,
     db: Session = Depends(get_db)
 ):
     vacancies = db.query(models.Vacancy).offset(skip).limit(limit).all()
-    return vacancies
+    return [_serialize(v) for v in vacancies]
 
 
 # =====================================
@@ -34,30 +45,26 @@ def get_vacancy(
     db: Session = Depends(get_db)
 ):
     vacancy = db.get(models.Vacancy, vacancy_id)
-
     if not vacancy:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Vacancy not found"
         )
-
-    return vacancy
+    return _serialize(vacancy)
 
 
 # =====================================
 # Create vacancy
 # =====================================
-@router.post(
-    "/",
-    response_model=schemas.VacancyResponse,
-    status_code=status.HTTP_201_CREATED
-)
+@router.post("/", response_model=schemas.VacancyResponse, status_code=status.HTTP_201_CREATED)
 def create_vacancy(
     vacancy: schemas.VacancyCreate,
     db: Session = Depends(get_db)
 ):
-    db_vac = models.Vacancy(**vacancy.dict())
+    data = vacancy.dict()
+    data["requirements"] = json.dumps(data.get("requirements") or [])
 
+    db_vac = models.Vacancy(**data)
     db.add(db_vac)
 
     try:
@@ -70,7 +77,7 @@ def create_vacancy(
             detail="Vacancy creation error"
         )
 
-    return db_vac
+    return _serialize(db_vac)
 
 
 # =====================================
@@ -83,16 +90,16 @@ def update_vacancy(
     db: Session = Depends(get_db)
 ):
     db_vac = db.get(models.Vacancy, vacancy_id)
-
     if not db_vac:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Vacancy not found"
         )
 
-    update_data = vacancy_update.dict(exclude_unset=True)
+    data = vacancy_update.dict()
+    data["requirements"] = json.dumps(data.get("requirements") or [])
 
-    for key, value in update_data.items():
+    for key, value in data.items():
         setattr(db_vac, key, value)
 
     try:
@@ -105,22 +112,18 @@ def update_vacancy(
             detail="Vacancy update error"
         )
 
-    return db_vac
+    return _serialize(db_vac)
 
 
 # =====================================
 # Delete vacancy
 # =====================================
-@router.delete(
-    "/{vacancy_id}",
-    status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/{vacancy_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_vacancy(
     vacancy_id: int,
     db: Session = Depends(get_db)
 ):
     vacancy = db.get(models.Vacancy, vacancy_id)
-
     if not vacancy:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -129,5 +132,4 @@ def delete_vacancy(
 
     db.delete(vacancy)
     db.commit()
-
     return None

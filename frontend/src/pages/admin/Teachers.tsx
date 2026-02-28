@@ -1,6 +1,6 @@
 // src/pages/admin/Teachers.tsx
 import { getTeachers, createTeacher, updateTeacher, deleteTeacher } from '../../api/api';
-import { Phone, Plus, FileSpreadsheet, Edit2, ChevronLeft, ChevronRight, X, Upload } from 'lucide-react';
+import { Phone, Plus, FileSpreadsheet, Edit2, ChevronLeft, ChevronRight, X, Upload, Trash2 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { exportToExcel } from '../../lib/excel';
@@ -8,13 +8,13 @@ import { cn } from '../../lib/utils';
 
 interface Teacher {
   id: number;
-  name: string;
-  subject: string;
+  full_name: string;
+  specialty: string;
   experience: string;
   phone: string;
-  image: string;
-  tags: string[];
-  quote: string;
+  image?: string;
+  tags?: string;      // backend: Optional[str] — vergul bilan ajratilgan string
+  quote?: string;
 }
 
 export const Teachers = () => {
@@ -25,7 +25,6 @@ export const Teachers = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
 
-  // ─── Backenddan teacherlarni olish ───
   useEffect(() => {
     getTeachers()
       .then(setTeachers)
@@ -34,8 +33,8 @@ export const Teachers = () => {
   }, []);
 
   const [formData, setFormData] = React.useState({
-    name: '',
-    subject: '',
+    full_name: '',
+    specialty: '',
     experience: '',
     phone: '',
     image: '',
@@ -46,26 +45,27 @@ export const Teachers = () => {
   React.useEffect(() => {
     if (editingTeacher) {
       setFormData({
-        name: editingTeacher.name,
-        subject: editingTeacher.subject,
-        experience: editingTeacher.experience,
-        phone: editingTeacher.phone,
-        image: editingTeacher.image,
-        tags: editingTeacher.tags.join(', '),
-        quote: editingTeacher.quote
+        full_name: editingTeacher.full_name ?? '',
+        specialty: editingTeacher.specialty ?? '',
+        experience: editingTeacher.experience ?? '',
+        phone: editingTeacher.phone ?? '',
+        image: editingTeacher.image ?? '',
+        tags: editingTeacher.tags ?? '',
+        quote: editingTeacher.quote ?? ''
       });
     } else {
-      setFormData({ name: '', subject: '', experience: '', phone: '', image: '', tags: '', quote: '' });
+      setFormData({ full_name: '', specialty: '', experience: '', phone: '', image: '', tags: '', quote: '' });
     }
   }, [editingTeacher]);
 
   const handleExport = () => {
     const data = teachers.map(t => ({
-      'F.I.SH': t.name,
-      'Mutaxassislik': t.subject,
+      'F.I.SH': t.full_name,
+      'Mutaxassislik': t.specialty,
       'Tajriba': t.experience,
       'Telefon': t.phone,
-      'Iqtibos': t.quote
+      'Teglar': t.tags ?? '',
+      'Iqtibos': t.quote ?? ''
     }));
     exportToExcel(data, "O'qituvchilar");
   };
@@ -79,13 +79,17 @@ export const Teachers = () => {
     }
   };
 
-  // ─── Qo'shish yoki yangilash ───
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // tags — backend Optional[str] kutadi, shuning uchun string yuboramiz
     const teacherData = {
-      ...formData,
-      tags: formData.tags.split(',').map(t => t.trim()).filter(t => t),
-      image: formData.image || 'https://picsum.photos/seed/teacher/400/400'
+      full_name: formData.full_name,
+      specialty: formData.specialty,
+      experience: formData.experience,
+      phone: formData.phone,
+      image: formData.image || 'https://picsum.photos/seed/teacher/400/400',
+      tags: formData.tags || undefined,
+      quote: formData.quote || undefined,
     };
 
     try {
@@ -99,11 +103,10 @@ export const Teachers = () => {
       setShowModal(false);
       setEditingTeacher(null);
     } catch (err) {
-      console.error(err);
+      console.error('Submit error:', err);
     }
   };
 
-  // ─── O'chirish ───
   const handleDelete = async (id: number) => {
     if (!confirm("O'chirishni tasdiqlaysizmi?")) return;
     await deleteTeacher(id).catch(console.error);
@@ -146,42 +149,40 @@ export const Teachers = () => {
         {paginatedTeachers.map((teacher) => (
           <div key={teacher.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-6 relative group">
             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-              <button
-                onClick={() => openEditModal(teacher)}
-                className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all"
-              >
+              <button onClick={() => openEditModal(teacher)} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all">
                 <Edit2 className="w-5 h-5" />
               </button>
-              <button
-                onClick={() => handleDelete(teacher.id)}
-                className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-all"
-              >
-                <X className="w-5 h-5" />
+              <button onClick={() => handleDelete(teacher.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-all">
+                <Trash2 className="w-5 h-5" />
               </button>
             </div>
 
             <div className="flex items-center gap-4">
               <img
-                src={teacher.image}
-                alt={teacher.name}
+                src={teacher.image || 'https://picsum.photos/seed/teacher/400/400'}
+                alt={teacher.full_name}
                 className="w-16 h-16 rounded-2xl object-cover"
                 referrerPolicy="no-referrer"
               />
               <div className="flex-1">
-                <h3 className="font-bold text-slate-900">{teacher.name}</h3>
-                <p className="text-sm text-indigo-600 font-medium">{teacher.subject}</p>
+                <h3 className="font-bold text-slate-900">{teacher.full_name}</h3>
+                <p className="text-sm text-indigo-600 font-medium">{teacher.specialty}</p>
               </div>
             </div>
 
             <div className="space-y-3">
-              <p className="text-sm text-slate-500 line-clamp-2 italic">"{teacher.quote}"</p>
-              <div className="flex flex-wrap gap-1">
-                {teacher.tags.map((tag, idx) => (
-                  <span key={idx} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded">
-                    {tag}
-                  </span>
-                ))}
-              </div>
+              {teacher.quote && (
+                <p className="text-sm text-slate-500 line-clamp-2 italic">"{teacher.quote}"</p>
+              )}
+              {teacher.tags && (
+                <div className="flex flex-wrap gap-1">
+                  {teacher.tags.split(',').map((tag, idx) => (
+                    <span key={idx} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded">
+                      {tag.trim()}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-3 text-sm text-slate-600 pt-2">
                 <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center">
                   <Phone className="w-4 h-4 text-slate-400" />
@@ -212,34 +213,17 @@ export const Teachers = () => {
             <span className="font-bold text-slate-900"> {startIndex + 1}-{Math.min(startIndex + itemsPerPage, teachers.length)}</span> ko'rsatilmoqda
           </p>
           <div className="flex gap-2">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm"
-            >
+            <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm">
               <ChevronLeft className="w-4 h-4" /> Oldingi
             </button>
             <div className="flex items-center gap-1">
               {[...Array(totalPages)].map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={cn(
-                    "w-10 h-10 rounded-xl text-sm font-bold transition-all",
-                    currentPage === i + 1
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
-                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                  )}
-                >
+                <button key={i} onClick={() => setCurrentPage(i + 1)} className={cn("w-10 h-10 rounded-xl text-sm font-bold transition-all", currentPage === i + 1 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50")}>
                   {i + 1}
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm"
-            >
+            <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold text-sm">
               Keyingi <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -267,12 +251,12 @@ export const Teachers = () => {
               <form onSubmit={handleSubmit} className="p-4 md:p-8 space-y-4 max-h-[80vh] overflow-y-auto">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">F.I.SH</label>
-                  <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Masalan: Sardorbek Ismoilov" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                  <input required type="text" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} placeholder="Masalan: Sardorbek Ismoilov" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">Mutaxassisligi</label>
-                    <input required type="text" value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})} placeholder="MATEMATIKA" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                    <input required type="text" value={formData.specialty} onChange={e => setFormData({...formData, specialty: e.target.value})} placeholder="MATEMATIKA" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">Tajribasi</label>

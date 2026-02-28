@@ -1,26 +1,32 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Users,
-  Plus,
   Search,
   X,
-  UserPlus,
   Trash2,
   GraduationCap,
   FileSpreadsheet,
   Loader2,
+  AlertCircle,
+  RefreshCw,
+  Mail,
+  Phone,
+  MapPin,
+  Award,
+  Plus
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../../lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 import { exportToExcel } from '../../lib/excel';
 import {
   getGroup,
-  getStudents,
-  getEnrollments,
-  createEnrollment,
-  deleteEnrollment,
+  getCourses,
+  getTeachers,
+  addStudentToGroup,
+  removeStudentFromGroupByIds,
+  getGroupStudentsByGroup,
+  getApplications
 } from '../../api/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,24 +34,33 @@ import {
 interface Group {
   id: number;
   name: string;
-  courseName: string;
-  teacherName: string;
+  course_id: number;
+  teacher_id: number;
+}
+
+interface Course {
+  id: number;
+  name: string;
+}
+
+interface Teacher {
+  id: number;
+  full_name: string;
 }
 
 interface Student {
   id: number;
-  customId: string;
-  name: string;
+  full_name: string;
   phone: string;
-  status: 'active' | 'inactive';
   school: string;
   grade: string;
+  email?: string;
 }
 
-interface Enrollment {
+interface GroupStudent {
   id: number;
-  student_id: number;
   group_id: number;
+  student_id: number;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -56,16 +71,35 @@ export const GroupDetail: React.FC = () => {
   const groupId = Number(id);
 
   const [group, setGroup] = useState<Group | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [groupStudents, setGroupStudents] = useState<Student[]>([]);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [groupStudentRelations, setGroupStudentRelations] = useState<GroupStudent[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [addingId, setAddingId] = useState<number | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // ── Close dropdown on outside click ──────────────────────────────────────
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(e.target as Node)
+      ) {
+        setShowSearchResults(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // ── Load data ─────────────────────────────────────────────────────────────
 
@@ -74,22 +108,42 @@ export const GroupDetail: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const [groupData, allEnrollments, allStudentsData] = await Promise.all([
-        getGroup(groupId),
-        getEnrollments(),
-        getStudents(),
-      ]);
+      const [groupData, groupStudentsData, coursesData, teachersData, appsData] =
+        await Promise.all([
+          getGroup(groupId),
+          getGroupStudentsByGroup(groupId).catch(() => []),
+          getCourses().catch(() => []),
+          getTeachers().catch(() => []),
+          getApplications().catch(() => []),
+        ]);
 
       setGroup(groupData);
-      setAllStudents(allStudentsData);
+      setGroupStudentRelations(groupStudentsData);
+      setCourses(coursesData);
+      setTeachers(teachersData);
 
-      const thisGroupEnrollments: Enrollment[] = allEnrollments.filter(
-        (e: Enrollment) => e.group_id === groupId
+      // ✅ ASOSIY TUZATISH:
+      // /students/ bo'sh, shuning uchun active arizalarni student sifatida ishlatamiz
+      const activeStudents: Student[] = (appsData as any[])
+        .filter((a) => a.status === 'active')
+        .map((a) => ({
+          id: a.id,
+          full_name: a.full_name,
+          phone: a.phone,
+          school: a.school || '—',
+          grade: a.grade || '—',
+          email: a.email,
+        }));
+
+      setAllStudents(activeStudents);
+
+      // Guruhdagi studentlarni topish
+      const studentIds = new Set(
+        (groupStudentsData as GroupStudent[]).map((rel) => rel.student_id)
       );
-      setEnrollments(thisGroupEnrollments);
+      const students = activeStudents.filter((s) => studentIds.has(s.id));
+      setGroupStudents(students);
 
-      const enrolledIds = new Set(thisGroupEnrollments.map((e) => e.student_id));
-      setGroupStudents(allStudentsData.filter((s: Student) => enrolledIds.has(s.id)));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Xatolik yuz berdi');
     } finally {
@@ -101,104 +155,141 @@ export const GroupDetail: React.FC = () => {
     loadData();
   }, [loadData]);
 
-  // ── Add student ───────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  const getCourseName = (id: number) =>
+    courses.find((c) => c.id === id)?.name ?? '—';
+  const getTeacherName = (id: number) =>
+    teachers.find((t) => t.id === id)?.full_name ?? '—';
+
+  // ── Add student to group ───────────────────────────────────────────────────
 
   const handleAddStudent = async (studentId: number) => {
+    if (!group) return;
+
+    const alreadyInGroup = groupStudentRelations.some(
+      (rel) => rel.student_id === studentId
+    );
+
+    if (alreadyInGroup) {
+      alert("Bu o'quvchi allaqachon guruhda mavjud!");
+      return;
+    }
+
     try {
       setAddingId(studentId);
-      const newEnrollment: Enrollment = await createEnrollment({
+
+      await addStudentToGroup({
+        group_id: group.id,
         student_id: studentId,
-        group_id: groupId,
       });
-      setEnrollments((prev) => [...prev, newEnrollment]);
+
+      setGroupStudentRelations((prev) => [
+        ...prev,
+        { id: Date.now(), group_id: group.id, student_id: studentId },
+      ]);
+
       const student = allStudents.find((s) => s.id === studentId);
-      if (student) setGroupStudents((prev) => [...prev, student]);
+      if (student) {
+        setGroupStudents((prev) => [...prev, student]);
+      }
+
       setSearchTerm('');
+      setShowSearchResults(false);
+
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "O'quvchi qo'shishda xatolik");
+      const message =
+        err instanceof Error ? err.message : "O'quvchi qo'shishda xatolik";
+      alert(message);
     } finally {
       setAddingId(null);
     }
   };
 
-  // ── Remove student ────────────────────────────────────────────────────────
+  // ── Remove student from group ─────────────────────────────────────────────
 
   const handleRemoveStudent = async (studentId: number) => {
-    const enrollment = enrollments.find(
-      (e) => e.student_id === studentId && e.group_id === groupId
+    if (!group) return;
+
+    const relation = groupStudentRelations.find(
+      (rel) => rel.student_id === studentId
     );
-    if (!enrollment) return;
+
+    if (!relation) return;
+
+    if (!confirm("O'quvchini guruhdan o'chirishni tasdiqlaysizmi?")) return;
 
     try {
       setRemovingId(studentId);
-      await deleteEnrollment(enrollment.id);
-      setEnrollments((prev) => prev.filter((e) => e.id !== enrollment.id));
+
+      await removeStudentFromGroupByIds(group.id, studentId);
+
+      setGroupStudentRelations((prev) =>
+        prev.filter((r) => r.id !== relation.id)
+      );
       setGroupStudents((prev) => prev.filter((s) => s.id !== studentId));
+
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "O'chirish xatolik");
+      const message =
+        err instanceof Error ? err.message : "O'chirishda xatolik yuz berdi";
+      alert(message);
     } finally {
       setRemovingId(null);
     }
   };
 
-  // ── Export ────────────────────────────────────────────────────────────────
+  // ── Export to Excel ───────────────────────────────────────────────────────
 
   const handleExport = () => {
     const data = groupStudents.map((s) => ({
-      ID: s.customId,
-      'F.I.SH': s.name,
+      'F.I.SH': s.full_name,
       Telefon: s.phone,
-      Holat: s.status === 'active' ? 'Faol' : 'Tark etgan',
       Maktab: s.school,
       Sinf: s.grade,
+      Email: s.email ?? '—',
     }));
-    exportToExcel(data, `${group?.name ?? 'guruh'}_oquvchilari`);
+
+    exportToExcel(data, `${group?.name || 'guruh'}_oquvchilari`);
   };
 
-  // ── Available students (not enrolled, matches search) ─────────────────────
+  // ── Search results ────────────────────────────────────────────────────────
 
   const enrolledIds = new Set(groupStudents.map((s) => s.id));
-  const availableStudents = allStudents.filter(
-    (s) =>
-      !enrolledIds.has(s.id) &&
-      (s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.customId?.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+
+  const searchResults = allStudents.filter((s) => {
+    if (enrolledIds.has(s.id)) return false;
+    if (searchTerm.trim() === '') return false;
+
+    const searchLower = searchTerm.toLowerCase().trim();
+    return (
+      s.full_name.toLowerCase().includes(searchLower) ||
+      s.phone.includes(searchLower)
+    );
+  });
 
   // ─── Loading state ────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-32">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/30 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
       </div>
     );
   }
 
-  if (error) {
+  if (error || !group) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 space-y-4">
-        <div className="text-red-500 font-medium">{error}</div>
-        <button
-          onClick={loadData}
-          className="text-indigo-600 font-bold flex items-center gap-2 underline"
-        >
-          Qayta urinish
-        </button>
-      </div>
-    );
-  }
-
-  if (!group) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 space-y-4">
-        <div className="text-slate-400">Guruh topilmadi</div>
-        <button
-          onClick={() => navigate('/admin/groups')}
-          className="text-indigo-600 font-bold flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" /> Ro'yxatga qaytish
-        </button>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/30 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-4" />
+          <p className="text-slate-500">{error || 'Guruh topilmadi'}</p>
+          <button
+            onClick={() => navigate('/admin/groups')}
+            className="text-indigo-600 mt-4 hover:underline"
+          >
+            Orqaga qaytish
+          </button>
+        </div>
       </div>
     );
   }
@@ -206,190 +297,254 @@ export const GroupDetail: React.FC = () => {
   // ─── Main render ──────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => navigate('/admin/groups')}
-          className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors font-bold"
-        >
-          <ArrowLeft className="w-4 h-4" /> Orqaga
-        </button>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <h1 className="text-2xl font-bold text-slate-900">{group.name}</h1>
-            <p className="text-slate-500 text-sm">
-              {group.courseName} • {group.teacherName}
-            </p>
-          </div>
-          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white">
-            <Users className="w-6 h-6" />
-          </div>
-        </div>
-      </div>
-
-      {/* Table card */}
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-50 flex justify-between items-center">
-          <div>
-            <h3 className="text-xl font-bold text-slate-900">Guruh o'quvchilari</h3>
-            <p className="text-slate-500 text-sm">Jami: {groupStudents.length} ta o'quvchi</p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={handleExport}
-              className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
-            >
-              <FileSpreadsheet className="w-5 h-5" /> Excel
-            </button>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-            >
-              <UserPlus className="w-5 h-5" /> O'quvchi qo'shish
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                <th className="px-8 py-6">ID</th>
-                <th className="px-8 py-6">F.I.SH</th>
-                <th className="px-8 py-6">Telefon</th>
-                <th className="px-8 py-6">Holat</th>
-                <th className="px-8 py-6 text-right">Amallar</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {groupStudents.map((student) => (
-                <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-8 py-6">
-                    <span className="font-mono text-indigo-600 font-bold">{student.customId}</span>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="font-bold text-slate-900">{student.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {student.school}, {student.grade}
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 text-sm text-slate-600">{student.phone}</td>
-                  <td className="px-8 py-6">
-                    <span
-                      className={cn(
-                        'px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider',
-                        student.status === 'active'
-                          ? 'bg-emerald-50 text-emerald-600'
-                          : 'bg-red-50 text-red-600'
-                      )}
-                    >
-                      {student.status === 'active' ? 'Faol' : 'Tark etgan'}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    <button
-                      onClick={() => handleRemoveStudent(student.id)}
-                      disabled={removingId === student.id}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all disabled:opacity-40"
-                    >
-                      {removingId === student.id ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-5 h-5" />
-                      )}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {groupStudents.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-8 py-20 text-center text-slate-400">
-                    Guruhda hozircha o'quvchilar yo'q.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add student modal */}
-      <AnimatePresence>
-        {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white w-full max-w-lg rounded-2xl md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
-            >
-              <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h2 className="text-lg md:text-xl font-bold text-slate-900">
-                  O'quvchi biriktirish
-                </h2>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="p-2 hover:bg-white rounded-xl transition-all text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/30">
+      {/* Navbar */}
+      <div className="bg-white border-b border-indigo-100 shadow-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate('/admin/groups')}
+                className="p-2 hover:bg-indigo-50 rounded-xl transition text-indigo-600"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-indigo-900">
+                  {group.name}
+                </h1>
+                <p className="text-xs text-slate-500">
+                  {getCourseName(group.course_id)} •{' '}
+                  {getTeacherName(group.teacher_id)}
+                </p>
               </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleExport}
+                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition"
+                title="Excel yuklash"
+              >
+                <FileSpreadsheet className="w-5 h-5" />
+              </button>
+              <button
+                onClick={loadData}
+                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition"
+                title="Yangilash"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-              <div className="p-6 md:p-8 space-y-6 overflow-y-auto">
-                <div className="relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Ism yoki ID bo'yicha qidirish"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  />
-                </div>
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto p-4 md:p-6">
+        {/* Search Bar */}
+        <div className="mb-6 relative" ref={searchContainerRef}>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-400" />
+            <input
+              type="text"
+              placeholder="O'quvchi ismi yoki telefon raqamini yozing..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setShowSearchResults(true);
+              }}
+              onFocus={() => setShowSearchResults(true)}
+              className="w-full pl-10 pr-4 py-3 bg-white border-2 border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none transition"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setShowSearchResults(false);
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-indigo-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
 
-                <div className="space-y-2">
-                  {availableStudents.map((student) => (
-                    <button
-                      key={student.id}
-                      onClick={() => handleAddStudent(student.id)}
-                      disabled={addingId === student.id}
-                      className="w-full flex items-center justify-between p-4 rounded-2xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all text-left group disabled:opacity-50"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-slate-100">
-                          <GraduationCap className="w-5 h-5 text-slate-400 group-hover:text-indigo-600" />
+          {/* Search Results Dropdown */}
+          <AnimatePresence>
+            {showSearchResults && searchTerm.trim() !== '' && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute z-20 mt-2 w-full bg-white rounded-xl border-2 border-indigo-200 shadow-xl overflow-hidden"
+              >
+                <div className="max-h-96 overflow-y-auto">
+                  {searchResults.length > 0 ? (
+                    searchResults.map((student) => (
+                      <div
+                        key={student.id}
+                        onClick={() => handleAddStudent(student.id)}
+                        className="flex items-center justify-between p-4 hover:bg-indigo-50 cursor-pointer transition border-b border-indigo-100 last:border-b-0"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                            <GraduationCap className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-slate-900">
+                              {student.full_name}
+                            </h3>
+                            <div className="flex items-center gap-3 text-sm text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <Phone className="w-3 h-3" />
+                                {student.phone}
+                              </span>
+                              <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                {student.school}, {student.grade}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900">{student.name}</div>
-                          <div className="text-xs text-slate-400 font-mono">{student.customId}</div>
-                        </div>
+                        {addingId === student.id ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                        ) : (
+                          <Plus className="w-5 h-5 text-indigo-400 hover:text-indigo-600" />
+                        )}
                       </div>
-                      {addingId === student.id ? (
-                        <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
-                      ) : (
-                        <Plus className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" />
-                      )}
-                    </button>
-                  ))}
-                  {availableStudents.length === 0 && (
-                    <div className="text-center py-8 text-slate-400">O'quvchilar topilmadi</div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-slate-500">
+                      <Search className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p>"{searchTerm}" bo'yicha hech narsa topilmadi</p>
+                      <p className="text-sm text-slate-400 mt-2">
+                        Boshqa so'z bilan qayta urinib ko'ring
+                      </p>
+                    </div>
                   )}
                 </div>
-              </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-              <div className="p-6 md:p-8 border-t border-slate-100 bg-slate-50/50">
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="w-full bg-slate-200 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-300 transition-all"
-                >
-                  Yopish
-                </button>
+        {/* Students Table */}
+        <div className="bg-white rounded-2xl border-2 border-indigo-200 shadow-xl overflow-hidden">
+          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4">
+            <div className="flex items-center justify-between text-white">
+              <div className="flex items-center gap-4">
+                <Award className="w-5 h-5" />
+                <span className="font-medium">Guruh o'quvchilari</span>
               </div>
-            </motion.div>
+              <span className="text-sm bg-white/20 px-3 py-1 rounded-full">
+                {groupStudents.length} ta
+              </span>
+            </div>
           </div>
-        )}
-      </AnimatePresence>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b-2 border-indigo-200">
+                  <th className="px-6 py-4 text-left font-semibold text-indigo-800">#</th>
+                  <th className="px-6 py-4 text-left font-semibold text-indigo-800">O'quvchi</th>
+                  <th className="px-6 py-4 text-left font-semibold text-indigo-800">Telefon</th>
+                  <th className="px-6 py-4 text-left font-semibold text-indigo-800">Maktab</th>
+                  <th className="px-6 py-4 text-left font-semibold text-indigo-800">Sinf</th>
+                  <th className="px-6 py-4 text-right font-semibold text-indigo-800">Amallar</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-indigo-100">
+                {groupStudents.map((student, index) => (
+                  <motion.tr
+                    key={student.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="hover:bg-indigo-50/50 transition-colors cursor-pointer group"
+                  >
+                    <td className="px-6 py-4 text-sm text-indigo-400">{index + 1}</td>
+                    <td
+                      className="px-6 py-4"
+                      onClick={() => navigate(`/admin/students/${student.id}`)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition">
+                          <GraduationCap className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-slate-900 group-hover:text-indigo-600 transition">
+                            {student.full_name}
+                          </div>
+                          {student.email && (
+                            <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Mail className="w-3 h-3" />
+                              {student.email}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td
+                      className="px-6 py-4 text-sm text-slate-600"
+                      onClick={() => navigate(`/admin/students/${student.id}`)}
+                    >
+                      {student.phone}
+                    </td>
+                    <td
+                      className="px-6 py-4 text-sm text-slate-600"
+                      onClick={() => navigate(`/admin/students/${student.id}`)}
+                    >
+                      {student.school}
+                    </td>
+                    <td
+                      className="px-6 py-4"
+                      onClick={() => navigate(`/admin/students/${student.id}`)}
+                    >
+                      <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-medium">
+                        {student.grade}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveStudent(student.id);
+                        }}
+                        disabled={removingId === student.id}
+                        className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition disabled:opacity-40"
+                      >
+                        {removingId === student.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </td>
+                  </motion.tr>
+                ))}
+
+                {groupStudents.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <Users className="w-12 h-12 text-slate-300" />
+                        <p className="text-slate-500">Guruhda hozircha o'quvchilar yo'q</p>
+                        <p className="text-sm text-slate-400">
+                          Yuqoridagi qidiruv orqali o'quvchilar qo'shing
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
+
+export default GroupDetail;

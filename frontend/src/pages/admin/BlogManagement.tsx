@@ -10,12 +10,13 @@ import { cn } from '../../lib/utils';
 interface BlogPost {
   id: number;
   title: string;
-  excerpt: string;
+  short_text: string;       // backend: short_text
   content: string;
-  image: string;
-  videoUrl?: string;
-  status: 'published' | 'draft';
-  date: string;
+  image?: string;
+  youtube_link?: string;    // backend: youtube_link
+  status: string;           // backend: str ("draft" | "published")
+  created_at: string;
+  updated_at: string;
 }
 
 export const BlogManagement = () => {
@@ -28,14 +29,13 @@ export const BlogManagement = () => {
 
   const [formData, setFormData] = React.useState({
     title: '',
-    excerpt: '',
+    short_text: '',
     content: '',
     image: '',
-    videoUrl: '',
-    status: 'draft' as 'published' | 'draft'
+    youtube_link: '',
+    status: 'draft'
   });
 
-  // ─── Backenddan bloglarni olish ───
   useEffect(() => {
     getBlogs()
       .then(setBlogPosts)
@@ -57,7 +57,7 @@ export const BlogManagement = () => {
   };
 
   const resetForm = () => {
-    setFormData({ title: '', excerpt: '', content: '', image: '', videoUrl: '', status: 'draft' });
+    setFormData({ title: '', short_text: '', content: '', image: '', youtube_link: '', status: 'draft' });
     setIsAdding(false);
     setEditingPost(null);
   };
@@ -66,22 +66,24 @@ export const BlogManagement = () => {
     setEditingPost(post);
     setFormData({
       title: post.title,
-      excerpt: post.excerpt,
+      short_text: post.short_text,
       content: post.content,
-      image: post.image,
-      videoUrl: post.videoUrl || '',
+      image: post.image ?? '',
+      youtube_link: post.youtube_link ?? '',
       status: post.status
     });
     setIsAdding(true);
   };
 
-  // ─── Qo'shish yoki yangilash ───
-  const handleSubmit = async (status: 'published' | 'draft') => {
+  const handleSubmit = async (status: string) => {
+    // BlogCreate schemaga mos: title, image, youtube_link, short_text, content, status
     const postData = {
-      ...formData,
+      title: formData.title,
+      short_text: formData.short_text,
+      content: formData.content,
+      image: formData.image || undefined,
+      youtube_link: formData.youtube_link || undefined,
       status,
-      image: formData.image || 'https://picsum.photos/seed/blog/800/400',
-      date: editingPost ? editingPost.date : new Date().toISOString().split('T')[0]
     };
     try {
       if (editingPost) {
@@ -97,18 +99,16 @@ export const BlogManagement = () => {
     }
   };
 
-  // ─── Status almashtirish ───
   const handleToggleStatus = async (post: BlogPost) => {
     const newStatus = post.status === 'published' ? 'draft' : 'published';
     try {
-      const updated = await updateBlog(post.id, { ...post, status: newStatus });
+      const updated = await updateBlog(post.id, { status: newStatus });
       setBlogPosts(prev => prev.map(p => p.id === post.id ? updated : p));
     } catch (err) {
       console.error(err);
     }
   };
 
-  // ─── O'chirish ───
   const handleDelete = async (id: number) => {
     if (!confirm("O'chirishni tasdiqlaysizmi?")) return;
     await deleteBlog(id).catch(console.error);
@@ -163,7 +163,14 @@ export const BlogManagement = () => {
               <div className="p-4 md:p-8 space-y-6 overflow-y-auto flex-1">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">Sarlavha</label>
-                  <input required type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Yangilik sarlavhasi" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                  <input
+                    required
+                    type="text"
+                    value={formData.title}
+                    onChange={e => setFormData({...formData, title: e.target.value})}
+                    placeholder="Yangilik sarlavhasi"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -179,7 +186,13 @@ export const BlogManagement = () => {
                     <label className="text-sm font-bold text-slate-700">YouTube Video Link (ixtiyoriy)</label>
                     <div className="relative">
                       <Youtube className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-red-500" />
-                      <input type="text" value={formData.videoUrl} onChange={e => setFormData({...formData, videoUrl: e.target.value})} placeholder="https://youtube.com/watch?v=..." className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                      <input
+                        type="text"
+                        value={formData.youtube_link}
+                        onChange={e => setFormData({...formData, youtube_link: e.target.value})}
+                        placeholder="https://youtube.com/watch?v=..."
+                        className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      />
                     </div>
                   </div>
                 </div>
@@ -187,7 +200,11 @@ export const BlogManagement = () => {
                 {formData.image && (
                   <div className="relative w-full h-48 rounded-2xl overflow-hidden">
                     <img src={formData.image} className="w-full h-full object-cover" alt="Preview" />
-                    <button type="button" onClick={() => setFormData({...formData, image: ''})} className="absolute top-2 right-2 p-1 bg-white/80 rounded-lg text-red-500">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({...formData, image: ''})}
+                      className="absolute top-2 right-2 p-1 bg-white/80 rounded-lg text-red-500"
+                    >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -195,25 +212,47 @@ export const BlogManagement = () => {
 
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">Qisqacha mazmun</label>
-                  <input required type="text" value={formData.excerpt} onChange={e => setFormData({...formData, excerpt: e.target.value})} placeholder="Ro'yxatda ko'rinadigan qisqa matn" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                  <input
+                    required
+                    type="text"
+                    value={formData.short_text}
+                    onChange={e => setFormData({...formData, short_text: e.target.value})}
+                    placeholder="Ro'yxatda ko'rinadigan qisqa matn"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">To'liq matn</label>
                   <div className="bg-white rounded-xl overflow-hidden border border-slate-200">
-                    <ReactQuill theme="snow" value={formData.content} onChange={content => setFormData({...formData, content})} modules={quillModules} className="h-64 mb-12" />
+                    <ReactQuill
+                      theme="snow"
+                      value={formData.content}
+                      onChange={content => setFormData({...formData, content})}
+                      modules={quillModules}
+                      className="h-64 mb-12"
+                    />
                   </div>
                 </div>
               </div>
 
               <div className="p-4 md:p-8 border-t border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4">
-                <button onClick={() => handleSubmit('published')} className="flex-1 bg-indigo-600 text-white py-3 md:py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => handleSubmit('published')}
+                  className="flex-1 bg-indigo-600 text-white py-3 md:py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
+                >
                   <Send className="w-5 h-5" /> Publish qilish
                 </button>
-                <button onClick={() => handleSubmit('draft')} className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 md:py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                <button
+                  onClick={() => handleSubmit('draft')}
+                  className="flex-1 bg-white border border-slate-200 text-slate-700 py-3 md:py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                >
                   <Save className="w-5 h-5" /> Saqlash (Draft)
                 </button>
-                <button onClick={resetForm} className="px-8 bg-slate-200 text-slate-600 py-3 md:py-4 rounded-2xl font-bold hover:bg-slate-300 transition-all">
+                <button
+                  onClick={resetForm}
+                  className="px-8 bg-slate-200 text-slate-600 py-3 md:py-4 rounded-2xl font-bold hover:bg-slate-300 transition-all"
+                >
                   Bekor qilish
                 </button>
               </div>
@@ -226,13 +265,21 @@ export const BlogManagement = () => {
         {paginatedPosts.map((post) => (
           <div key={post.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex gap-6 items-start group">
             <div className="w-32 h-32 rounded-2xl overflow-hidden shrink-0 relative">
-              <img src={post.image} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              {post.videoUrl && (
+              <img
+                src={post.image || 'https://picsum.photos/seed/blog/800/400'}
+                alt=""
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+              {post.youtube_link && (
                 <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                   <Youtube className="w-8 h-8 text-white drop-shadow-lg" />
                 </div>
               )}
-              <div className={cn("absolute top-2 left-2 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider", post.status === 'published' ? "bg-emerald-500 text-white" : "bg-amber-500 text-white")}>
+              <div className={cn(
+                "absolute top-2 left-2 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider",
+                post.status === 'published' ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"
+              )}>
                 {post.status === 'published' ? 'Published' : 'Draft'}
               </div>
             </div>
@@ -241,27 +288,45 @@ export const BlogManagement = () => {
                 <div>
                   <h3 className="font-bold text-slate-900 text-lg">{post.title}</h3>
                   <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
-                    <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> {post.date}</span>
-                    {post.videoUrl && <span className="flex items-center gap-1 text-red-500 font-medium"><Youtube className="w-4 h-4" /> Video</span>}
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      {post.created_at?.split('T')[0]}
+                    </span>
+                    {post.youtube_link && (
+                      <span className="flex items-center gap-1 text-red-500 font-medium">
+                        <Youtube className="w-4 h-4" /> Video
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => handleEdit(post)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Tahrirlash">
+                  <button
+                    onClick={() => handleEdit(post)}
+                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                    title="Tahrirlash"
+                  >
                     <Edit3 className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => handleToggleStatus(post)}
-                    className={cn("p-2 rounded-lg transition-all", post.status === 'published' ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50")}
+                    className={cn(
+                      "p-2 rounded-lg transition-all",
+                      post.status === 'published' ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"
+                    )}
                     title={post.status === 'published' ? "Unpublish qilish" : "Publish qilish"}
                   >
                     {post.status === 'published' ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
-                  <button onClick={() => handleDelete(post.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="O'chirish">
+                  <button
+                    onClick={() => handleDelete(post.id)}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                    title="O'chirish"
+                  >
                     <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
               </div>
-              <p className="text-slate-600 line-clamp-2 text-sm">{post.excerpt}</p>
+              <p className="text-slate-600 line-clamp-2 text-sm">{post.short_text}</p>
             </div>
           </div>
         ))}

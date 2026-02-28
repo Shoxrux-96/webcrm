@@ -7,25 +7,22 @@ import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { exportToExcel } from '../../lib/excel';
 
+// ─── Backend schemalariga mos interfacelar ───
 interface Course {
   id: number;
-  title: string;
+  name: string;       // CourseBase: name
 }
 
 interface Teacher {
   id: number;
-  name: string;
+  full_name: string;  // TeacherBase: full_name
 }
 
 interface Group {
   id: number;
   name: string;
-  courseId: number;
-  courseName: string;
-  teacherId: number;
-  teacherName: string;
-  studentIds: number[];
-  createdAt: string;
+  course_id: number;
+  teacher_id: number;
 }
 
 export const Groups = () => {
@@ -40,11 +37,10 @@ export const Groups = () => {
 
   const [formData, setFormData] = React.useState({
     name: '',
-    courseId: '',
-    teacherId: '',
+    course_id: '',
+    teacher_id: '',
   });
 
-  // ─── Backenddan ma'lumotlarni olish ───
   useEffect(() => {
     Promise.all([getGroups(), getCourses(), getTeachers()])
       .then(([g, c, t]) => {
@@ -56,35 +52,31 @@ export const Groups = () => {
       .finally(() => setLoading(false));
   }, []);
 
+  // ─── course_id va teacher_id bo'yicha nom topish ───
+  const getCourseName = (id: number) => courses.find(c => c.id === id)?.name ?? '—';
+  const getTeacherName = (id: number) => teachers.find(t => t.id === id)?.full_name ?? '—';
+
   const handleExport = () => {
     const data = groups.map(g => ({
       'Guruh nomi': g.name,
-      'Kurs': g.courseName,
-      "O'qituvchi": g.teacherName,
-      "O'quvchilar soni": g.studentIds?.length ?? 0,
-      'Yaratilgan sana': g.createdAt
+      'Kurs': getCourseName(g.course_id),
+      "O'qituvchi": getTeacherName(g.teacher_id),
     }));
     exportToExcel(data, 'Guruhlar');
   };
 
-  // ─── Guruh qo'shish ───
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const course = courses.find(c => c.id === Number(formData.courseId));
-    const teacher = teachers.find(t => t.id === Number(formData.teacherId));
-    if (!course || !teacher) return;
-
     try {
+      // GroupCreate: { name, course_id, teacher_id }
       const created = await createGroup({
         name: formData.name,
-        courseId: Number(formData.courseId),
-        courseName: course.title,
-        teacherId: Number(formData.teacherId),
-        teacherName: teacher.name,
+        course_id: Number(formData.course_id),
+        teacher_id: Number(formData.teacher_id),
       });
       setGroups(prev => [...prev, created]);
       setShowModal(false);
-      setFormData({ name: '', courseId: '', teacherId: '' });
+      setFormData({ name: '', course_id: '', teacher_id: '' });
     } catch (err) {
       console.error(err);
     }
@@ -92,8 +84,8 @@ export const Groups = () => {
 
   const filteredGroups = groups.filter(group =>
     group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    group.courseName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    group.teacherName?.toLowerCase().includes(searchTerm.toLowerCase())
+    getCourseName(group.course_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
+    getTeacherName(group.teacher_id).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const totalPages = Math.ceil(filteredGroups.length / rowsPerPage);
@@ -143,7 +135,6 @@ export const Groups = () => {
                 <th className="px-8 py-6">Guruh nomi</th>
                 <th className="px-8 py-6">Kurs</th>
                 <th className="px-8 py-6">O'qituvchi</th>
-                <th className="px-8 py-6">O'quvchilar soni</th>
                 <th className="px-8 py-6 text-right">Amallar</th>
               </tr>
             </thead>
@@ -161,7 +152,7 @@ export const Groups = () => {
                   </td>
                   <td className="px-8 py-6">
                     <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-bold">
-                      {group.courseName}
+                      {getCourseName(group.course_id)}
                     </span>
                   </td>
                   <td className="px-8 py-6">
@@ -169,13 +160,7 @@ export const Groups = () => {
                       <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
                         <UserSquare2 className="w-4 h-4 text-slate-400" />
                       </div>
-                      <span className="font-medium text-slate-700">{group.teacherName}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <Users className="w-4 h-4 text-slate-400" />
-                      <span className="font-bold">{group.studentIds?.length ?? 0} ta</span>
+                      <span className="font-medium text-slate-700">{getTeacherName(group.teacher_id)}</span>
                     </div>
                   </td>
                   <td className="px-8 py-6 text-right">
@@ -190,7 +175,7 @@ export const Groups = () => {
               ))}
               {paginatedGroups.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-8 py-20 text-center text-slate-400">
+                  <td colSpan={4} className="px-8 py-20 text-center text-slate-400">
                     Hozircha guruhlar mavjud emas. Yangi guruh yarating.
                   </td>
                 </tr>
@@ -243,23 +228,40 @@ export const Groups = () => {
               <form onSubmit={handleSubmit} className="p-4 md:p-8 space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">Guruh nomi</label>
-                  <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Masalan: Frontend-101" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                  <input
+                    required
+                    type="text"
+                    value={formData.name}
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                    placeholder="Masalan: Frontend-101"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">Kursni tanlang</label>
-                  <select required value={formData.courseId} onChange={e => setFormData({...formData, courseId: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+                  <select
+                    required
+                    value={formData.course_id}
+                    onChange={e => setFormData({...formData, course_id: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  >
                     <option value="">Kursni tanlang</option>
                     {courses.map(course => (
-                      <option key={course.id} value={course.id}>{course.title}</option>
+                      <option key={course.id} value={course.id}>{course.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">O'qituvchini tanlang</label>
-                  <select required value={formData.teacherId} onChange={e => setFormData({...formData, teacherId: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+                  <select
+                    required
+                    value={formData.teacher_id}
+                    onChange={e => setFormData({...formData, teacher_id: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  >
                     <option value="">O'qituvchini tanlang</option>
                     {teachers.map(teacher => (
-                      <option key={teacher.id} value={teacher.id}>{teacher.name}</option>
+                      <option key={teacher.id} value={teacher.id}>{teacher.full_name}</option>
                     ))}
                   </select>
                 </div>

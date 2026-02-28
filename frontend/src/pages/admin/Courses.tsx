@@ -1,6 +1,6 @@
 // src/pages/admin/Courses.tsx
 import { getCourses, createCourse, updateCourse, deleteCourse } from '../../api/api';
-import { BookOpen, Users, Clock, Plus, Trash2, X, Target, FileSpreadsheet, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BookOpen, Clock, Plus, Trash2, X, Target, FileSpreadsheet, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { exportToExcel } from '../../lib/excel';
@@ -8,12 +8,11 @@ import { cn } from '../../lib/utils';
 
 interface Course {
   id: number;
-  title: string;
+  name: string;
   description: string;
   price: number;
   duration: string;
-  targetAudience: string;
-  studentsCount: number;
+  audience: string;
 }
 
 export const Courses = () => {
@@ -33,34 +32,33 @@ export const Courses = () => {
   }, []);
 
   const [formData, setFormData] = React.useState({
-    title: '',
+    name: '',
     description: '',
     price: 0,
     duration: '',
-    targetAudience: '',
+    audience: '',
   });
 
   React.useEffect(() => {
     if (editingCourse) {
       setFormData({
-        title: editingCourse.title,
+        name: editingCourse.name,
         description: editingCourse.description,
         price: editingCourse.price,
         duration: editingCourse.duration,
-        targetAudience: editingCourse.targetAudience,
+        audience: editingCourse.audience,
       });
     } else {
-      setFormData({ title: '', description: '', price: 0, duration: '', targetAudience: '' });
+      setFormData({ name: '', description: '', price: 0, duration: '', audience: '' });
     }
   }, [editingCourse]);
 
   const handleExport = () => {
     const data = courses.map(c => ({
-      'Kurs nomi': c.title,
+      'Kurs nomi': c.name,
       'Narxi': c.price,
       'Davomiyligi': c.duration,
-      "O'quvchilar soni": c.studentsCount,
-      'Maqsadli auditoriya': c.targetAudience,
+      'Maqsadli auditoriya': c.audience,
       'Tavsif': c.description
     }));
     exportToExcel(data, 'Kurslar');
@@ -74,7 +72,7 @@ export const Courses = () => {
         const updated = await updateCourse(editingCourse.id, formData);
         setCourses(prev => prev.map(c => c.id === editingCourse.id ? updated : c));
       } else {
-        const created = await createCourse({ ...formData, studentsCount: 0 });
+        const created = await createCourse(formData);
         setCourses(prev => [...prev, created]);
       }
       setShowModal(false);
@@ -144,7 +142,7 @@ export const Courses = () => {
               <form onSubmit={handleSubmit} className="p-4 md:p-8 space-y-4 max-h-[80vh] overflow-y-auto">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">Kurs nomi</label>
-                  <input required type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Masalan: Frontend React" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                  <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Masalan: Frontend React" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -158,7 +156,7 @@ export const Courses = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">Kimlar uchun</label>
-                  <input required type="text" value={formData.targetAudience} onChange={e => setFormData({...formData, targetAudience: e.target.value})} placeholder="Masalan: 7-11 sinf o'quvchilari" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                  <input required type="text" value={formData.audience} onChange={e => setFormData({...formData, audience: e.target.value})} placeholder="Masalan: 7-11 sinf o'quvchilari" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">Tavsif</label>
@@ -196,25 +194,18 @@ export const Courses = () => {
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-xl font-bold text-slate-900">{course.title}</h3>
+              <h3 className="text-xl font-bold text-slate-900">{course.name}</h3>
               <p className="text-sm text-slate-500 line-clamp-2">{course.description}</p>
             </div>
 
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-slate-600">
                 <Target className="w-4 h-4 text-indigo-500" />
-                <span className="font-medium">Kimlar uchun:</span> {course.targetAudience}
+                <span className="font-medium">Kimlar uchun:</span> {course.audience}
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-600">
                 <Clock className="w-4 h-4 text-indigo-500" />
                 <span className="font-medium">Muddati:</span> {course.duration}
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-slate-600">
-                <Users className="w-4 h-4 text-slate-400" />
-                {course.studentsCount} o'quvchi
               </div>
             </div>
           </div>

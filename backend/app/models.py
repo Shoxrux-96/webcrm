@@ -145,10 +145,11 @@ class Vacancy(Base, TimestampMixin):
     salary = Column(String, nullable=False)
     location = Column(String, nullable=False)
     description = Column(Text)
-    requirements = Column(Text)
-    status = Column(String, default="faol")
+    requirements = Column(Text)        # JSON string sifatida saqlanadi
+    status = Column(String, default="active")
+    date = Column(String, nullable=True)  # ✅ QO'SHILDI
 
-
+    
 # ================================
 # Blog
 # ================================
@@ -162,3 +163,57 @@ class Blog(Base, TimestampMixin):
     short_text = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     status = Column(String, default="draft")
+
+# ================================
+# models.py ga qo'shish (oxiriga)
+# ================================
+
+class Application(Base, TimestampMixin):
+    __tablename__ = "applications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String, nullable=False)
+    phone = Column(String, nullable=False)
+    address = Column(String)
+    school = Column(String, nullable=False)
+    grade = Column(String, nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True)
+    course_name = Column(String)
+    comment = Column(Text)
+    status = Column(String, default="pending")  # pending | approved | rejected
+
+# JSON o'rniga String ishlatish
+class VacancyApplication(Base, TimestampMixin):
+    __tablename__ = "vacancy_applications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String, nullable=False)
+    phone = Column(String, nullable=False)
+    education = Column(String, nullable=False)
+    # String sifatida saqlash (JSON.stringify qilish kerak)
+    certificates = Column(Text, default="[]")  # JSON string sifatida
+    certificate_level = Column(String, nullable=True)
+    vacancy_id = Column(Integer, ForeignKey("vacancies.id", ondelete="SET NULL"), nullable=False)
+    status = Column(String, default="pending")
+    notes = Column(Text, nullable=True)
+
+    vacancy = relationship("Vacancy", backref="applications")
+
+# ================================
+# Payment (To'lovlar)
+# ================================
+# Bu kodni models.py fayliga oxiriga qo'shing
+
+class Payment(Base, TimestampMixin):
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
+    amount = Column(Integer, nullable=False)        # To'langan summa
+    month = Column(String, nullable=False)          # "2026-02" formatida
+    status = Column(String, default="pending")      # pending | paid
+    note = Column(Text, nullable=True)
+
+    student = relationship("Student", backref="payments")
+    course = relationship("Course", backref="payments")

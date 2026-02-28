@@ -1,14 +1,43 @@
+import React from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useTeachers } from '../TeacherContext';
+import { getBlog } from '../api/api';
 import { Calendar, ArrowLeft, Share2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+interface Blog {
+  id: number;
+  title: string;
+  image?: string;
+  youtube_link?: string;
+  short_text: string;
+  content: string;
+  status: string;
+  created_at: string;
+}
+
 export const BlogDetail = () => {
   const { id } = useParams();
-  const { blogPosts } = useTeachers();
-  const post = blogPosts.find(p => p.id === id && p.status === 'published');
+  const [post, setPost] = React.useState<Blog | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
-  if (!post) {
+  React.useEffect(() => {
+    if (!id) return;
+    getBlog(Number(id))
+      .then(setPost)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const getYoutubeId = (url: string) => {
+    const match = url.match(/(?:youtu\.be\/|v\/|watch\?v=|&v=)([^#&?]{11})/);
+    return match ? match[1] : null;
+  };
+
+  if (loading) {
+    return <div className="max-w-4xl mx-auto px-4 py-32 text-center text-slate-400">Yuklanmoqda...</div>;
+  }
+
+  if (!post || post.status !== 'published') {
     return (
       <div className="max-w-7xl mx-auto px-4 py-32 text-center space-y-6">
         <h1 className="text-4xl font-bold text-slate-900">Maqola topilmadi yoki hali chop etilmagan</h1>
@@ -19,16 +48,10 @@ export const BlogDetail = () => {
     );
   }
 
-  const getYoutubeId = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
-
-  const videoId = post.videoUrl ? getYoutubeId(post.videoUrl) : null;
+  const videoId = post.youtube_link ? getYoutubeId(post.youtube_link) : null;
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="max-w-4xl mx-auto px-4 py-16 space-y-12"
@@ -41,10 +64,8 @@ export const BlogDetail = () => {
         <div className="space-y-4">
           <div className="flex items-center gap-4 text-sm text-slate-500 font-medium">
             <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full">
-              <Calendar className="w-4 h-4" /> {post.date}
+              <Calendar className="w-4 h-4" /> {post.created_at?.split('T')[0]}
             </span>
-            <span>•</span>
-            <span>5 daqiqa o'qish</span>
           </div>
           <h1 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight">
             {post.title}
@@ -61,26 +82,26 @@ export const BlogDetail = () => {
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-            ></iframe>
+            />
           </div>
-        ) : (
+        ) : post.image ? (
           <div className="aspect-video rounded-[2.5rem] overflow-hidden shadow-2xl">
-            <img 
-              src={post.image} 
-              alt={post.title} 
+            <img
+              src={post.image}
+              alt={post.title}
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
           </div>
-        )}
+        ) : null}
 
         <div className="grid lg:grid-cols-[1fr_auto] gap-12 items-start">
           <div className="prose prose-slate prose-lg max-w-none">
             <p className="text-xl text-slate-600 leading-relaxed font-medium mb-8">
-              {post.excerpt}
+              {post.short_text}
             </p>
-            <div 
-              className="text-slate-700 leading-relaxed space-y-6 blog-content"
+            <div
+              className="text-slate-700 leading-relaxed space-y-6"
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
           </div>
